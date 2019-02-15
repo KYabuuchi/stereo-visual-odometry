@@ -13,7 +13,6 @@ find_package(OpenCV REQUIRED)
 include(CheckCXXCompilerFlag)
 message("Using C++17")
 enable_language(CXX)
-# set(CMAKE_CXX_STANDARD 17)
 check_cxx_compiler_flag("-std=gnu++17" COMPILER_SUPPORTS_CXX17)
 if(NOT ${COMPILER_SUPPORTS_CXX17})
     message(
@@ -21,8 +20,7 @@ if(NOT ${COMPILER_SUPPORTS_CXX17})
             "${CMAKE_CXX_COMPILER} はC++17をサポートしてません。C++17に対応したコンパイラを指定してください。\n"
         )
 endif()
-set(CMAKE_CXX_FLAGS "-std=gnu++17 ${CMAKE_CXX_FLAGS}")
-set(CMAKE_C_FLAGS "-std=gnu99 ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_STANDARD 17)
 message("Compiler:\n\t${CMAKE_CXX_COMPILER}")
 
 # Set warning flags
