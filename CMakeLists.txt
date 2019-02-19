@@ -41,6 +41,9 @@ foreach(FLAG IN LISTS CXX_WARNING_FLAGS)
 endforeach()
 message("Build type:\n\t${CMAKE_BUILD_TYPE}")
 
+file(GLOB SOURCES src/*.cpp)
+message(STATE ${SOURCES})
+
 include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
-add_executable(main main.cpp)
+add_executable(main main.cpp ${SOURCES})
 target_link_libraries(main ${OpenCV_LIBS})
