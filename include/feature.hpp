@@ -5,7 +5,7 @@ namespace Feature
 {
 void init();
 
-void compute(cv::Mat image, std::vector<cv::KeyPoint>& keypoint, cv::Mat& descriptors);
+void compute(cv::Mat image, std::vector<cv::Point2f>& keypoint, cv::Mat& descriptors);
 
 void matching(
     const cv::Mat& descriptors1,

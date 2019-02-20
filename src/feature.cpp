@@ -14,9 +14,11 @@ void init()
     std::cout << "Feature type: " << detector->getDefaultName() << std::endl;
 }
 
-void compute(cv::Mat image, std::vector<cv::KeyPoint>& keypoint, cv::Mat& descriptors)
+void compute(cv::Mat image, std::vector<cv::Point2f>& points, cv::Mat& descriptors)
 {
-    detector->detectAndCompute(image, cv::noArray(), keypoint, descriptors);
+    std::vector<cv::KeyPoint> keypoints;
+    detector->detectAndCompute(image, cv::noArray(), keypoints, descriptors);
+    cv::KeyPoint::convert(keypoints, points, std::vector<int>());
 }
 
 // mutual matching(少ないものは1にセットすると良い)
