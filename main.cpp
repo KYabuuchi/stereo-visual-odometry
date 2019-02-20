@@ -21,7 +21,13 @@ int main()
     Feature::compute(src1, keypoints1, descriptor1);
     Feature::compute(src2, keypoints2, descriptor2);
 
+    std::vector<cv::DMatch> matches;
+    Feature::matching(descriptor1, descriptor2, matches);
 
-    Viewer::show(src1, src2, src1, src2);
+    //Viewer::show(src1, src2, src1, src2);
+    cv::Mat show;
+    std::cout << matches.size() << std::endl;
+    cv::drawMatches(src1, keypoints1, src2, keypoints2, matches, show, cv::Scalar::all(-1), cv::Scalar::all(-1), std::vector<char>());
+    cv::imshow(Params::WINDOW_NAME, show);
     cv::waitKey(0);
 }
