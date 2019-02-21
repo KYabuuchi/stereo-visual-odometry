@@ -2,25 +2,65 @@
 #include "params.hpp"
 #include "util.hpp"
 #include "viewer.hpp"
+#include <iostream>
 #include <opencv2/opencv.hpp>
 
-// 少なくともCL,CRがあることを保証する
+const int PL = 0;
+const int PR = 1;
+const int CL = 2;
+const int CR = 3;
+const int PRE = 4;
+const int CUR = 5;
+
+// 少なくともCLがあることを保証する
 class MapPoint
 {
 public:
+    // 特徴量記述子とCLとCR
     MapPoint(cv::Mat descriptor, cv::Point2f cur_left, cv::Point2f cur_right)
-        : m_descriptor(descriptor), m_cur_left(cur_left), m_cur_right(cur_right) {}
+        : m_descriptor(descriptor), m_feature{cv::Point2f(-1, -1), cv::Point2f(-1, -1), cur_left, cur_right},
+          m_cur_struct(cv::Point3f(-1, -1, -1)), m_pre_struct(cv::Point3f(-1, -1, -1)) {}
 
-    const cv::Mat m_descriptor;
-    cv::Mat1f m_cur_left, m_cur_right, m_pre_left, m_pre_right;
-
+    // 時間方向更新
     void update()
     {
-        m_cur_left.copyTo(m_pre_left);
-        m_cur_right.copyTo(m_pre_right);
+        m_feature.at(PR) = m_feature.at(CR);
+        m_feature.at(PL) = m_feature.at(CL);
+        m_pre_struct = m_cur_struct;
+        m_feature.at(CR) = cv::Point2f(-1, -1);
+        m_feature.at(CL) = cv::Point2f(-1, -1);
+        m_cur_struct = cv::Point3f(-1, -1, -1);
     }
 
+    // 姿勢推定が可能か否か
+    bool motionEstimatable() const { return enable(PL) and enable(CL); }
+    // 三角測量が可能か否か
+    bool triangulatable() const { return enable(CL) and enable(CR); }
+    // スケール推定が可能か否か
+    bool scaleEstimatable() const { return enable(PRE) and enable(CUR); }
+
+    bool enable(int id) const
+    {
+        if (id == PRE)
+            return m_pre_struct.x >= 0;
+        if (id == CUR)
+            return m_cur_struct.x >= 0;
+        return m_feature.at(id).x >= 0;
+    }
+
+    cv::Point2f pre_left() const { return m_feature.at(PL); }
+    cv::Point2f pre_right() const { return m_feature.at(PR); }
+    cv::Point2f cur_left() const { return m_feature.at(CL); }
+    cv::Point2f cur_right() const { return m_feature.at(CR); }
+
+    // 特徴量記述子
+    const cv::Mat m_descriptor;
+
 private:
+    // 現在・過去x左・右の特徴点座標[pixel]
+    std::array<cv::Point2f, 4> m_feature;
+    // 現在・過去の3次元点[m]
+    cv::Point3f m_cur_struct, m_pre_struct;
 };
 
 int main()
@@ -29,30 +69,113 @@ int main()
     Viewer::init();
     Feature::init();
 
-    cv::Mat src1, src2;
-    if (not readImage(1, src1, src2))
+    cv::Mat cur_left_image, cur_right_image;
+    cv::Mat pre_left_image, pre_right_image;
+
+    if (not readImage(1, cur_left_image, cur_right_image))
         return -1;
 
+    // 各視点での特徴点
     std::vector<MapPoint> mappoints;
     mappoints.reserve(500 * 2);
 
-    std::vector<cv::Point2f> keypoints1;
-    std::vector<cv::Point2f> keypoints2;
-    cv::Mat descriptor1, descriptor2;
-    std::vector<cv::DMatch> matches;
+    {
+        std::vector<cv::Point2f> keypoints1;
+        std::vector<cv::Point2f> keypoints2;
+        cv::Mat descriptor1, descriptor2;
+        std::vector<cv::DMatch> matches;
 
-    Feature::compute(src1, keypoints1, descriptor1);
-    Feature::compute(src2, keypoints2, descriptor2);
-    Feature::matching(descriptor1, descriptor2, matches);
-    for (size_t i = 0; i < matches.size(); i++) {
-        int query = matches.at(i).queryIdx;
-        int train = matches.at(i).trainIdx;
-        MapPoint mp(descriptor1.row(query), keypoints1.at(query), keypoints2.at(train));
-        mappoints.push_back(mp);
+        Feature::compute(cur_left_image, keypoints1, descriptor1);
+        Feature::compute(cur_right_image, keypoints2, descriptor2);
+        Feature::matching(descriptor1, descriptor2, matches);
+        for (size_t i = 0; i < matches.size(); i++) {
+            int query = matches.at(i).queryIdx;
+            int train = matches.at(i).trainIdx;
+            MapPoint mp(descriptor1.row(query), keypoints1.at(query), keypoints2.at(train));
+            mappoints.push_back(mp);
+        }
     }
-    std::cout << matches.size() << " mappoint is created" << std::endl;
 
-    cv::Mat show, merge1, merge2;
-    cv::imshow(Params::WINDOW_NAME, show);
-    cv::waitKey(0);
+    // 更新
+    for (MapPoint mp : mappoints) {
+        mp.update();
+    }
+    cur_left_image.copyTo(pre_left_image);
+    cur_right_image.copyTo(pre_right_image);
+
+    // Main Loop
+    while (1) {
+        std::cout << " mappoints has " << mappoints.size() << " elements" << std::endl;
+
+        // 画像取得
+        if (not readImage(2, cur_left_image, cur_right_image)) {
+            std::cout << "cannot read image" << std::endl;
+            return -1;
+        }
+        {
+            std::vector<cv::Point2f> keypoints1;
+            std::vector<cv::Point2f> keypoints2;
+            cv::Mat descriptor1, descriptor2;
+            std::vector<cv::DMatch> matches;
+
+            // 特徴点抽出
+            Feature::compute(cur_left_image, keypoints1, descriptor1);
+            Feature::compute(cur_right_image, keypoints2, descriptor2);
+            std::cout << "image" << std::endl;
+
+            // 時間方向対応
+            Feature::matching(descriptor1, descriptor2, matches);
+            for (size_t i = 0; i < matches.size(); i++) {
+                int query = matches.at(i).queryIdx;
+                int train = matches.at(i).trainIdx;
+                MapPoint mp(descriptor1.row(query), keypoints1.at(query), keypoints2.at(train));
+                mappoints.push_back(mp);
+            }
+            std::cout << "image" << std::endl;
+
+            // 空間方向対応
+        }
+
+        // Epipolar
+
+        // 三角測量
+
+        // スケーリング
+
+        // 描画
+        {
+            cv::Mat show, merge1, merge2;
+            cv::hconcat(pre_left_image, pre_right_image, merge1);
+            cv::hconcat(cur_left_image, cur_right_image, merge2);
+            cv::vconcat(merge1, merge2, show);
+
+            const cv::Size size = cur_left_image.size();
+            const cv::Point2f OFFSET_PL(0, 0);
+            const cv::Point2f OFFSET_PR(size.width, 0);
+            const cv::Point2f OFFSET_CL(0, size.height);
+            const cv::Point2f OFFSET_CR(size.width, size.height);
+
+            for (const auto& p : mappoints) {
+                if (p.enable(PL))
+                    cv::circle(show, p.pre_left() + OFFSET_PL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p.enable(PR))
+                    cv::circle(show, p.pre_right() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p.triangulatable())
+                    cv::line(show, p.pre_right() + OFFSET_PR, p.pre_left() + OFFSET_PL, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
+                if (p.enable(CL))
+                    cv::circle(show, p.cur_left() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p.enable(CR))
+                    cv::circle(show, p.cur_right() + OFFSET_CR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+            }
+            cv::imshow(Params::WINDOW_NAME, show);
+            cv::waitKey(0);
+        }
+
+        // 更新
+        for (MapPoint mp : mappoints) {
+            mp.update();
+        }
+        cur_left_image.copyTo(pre_left_image);
+        cur_right_image.copyTo(pre_right_image);
+    }
 }
