@@ -3,6 +3,7 @@
 #include "util.hpp"
 #include "viewer.hpp"
 #include <iostream>
+#include <memory>
 #include <opencv2/opencv.hpp>
 
 const int PL = 0;
@@ -71,6 +72,8 @@ private:
     cv::Point3f m_cur_struct, m_pre_struct;
 };
 
+typedef std::shared_ptr<MapPoint> MapPointPtr;
+
 int main()
 {
     // 初期化
@@ -84,7 +87,7 @@ int main()
         return -1;
 
     // 各視点での特徴点
-    std::vector<MapPoint*> mappoints;
+    std::vector<std::shared_ptr<MapPoint>> mappoints;
     mappoints.reserve(500 * 2);
 
     {
@@ -98,13 +101,13 @@ int main()
         for (size_t i = 0; i < matches.size(); i++) {
             int query = matches.at(i).queryIdx;
             int train = matches.at(i).trainIdx;
-            MapPoint* mp = new MapPoint(left_descriptors.row(query), left_keypoints.at(query), right_keypoints.at(train));
+            MapPointPtr mp = std::make_shared<MapPoint>(left_descriptors.row(query), left_keypoints.at(query), right_keypoints.at(train));
             mappoints.push_back(mp);
         }
     }
 
     // 更新
-    for (MapPoint* mp : mappoints) {
+    for (MapPointPtr mp : mappoints) {
         mp->update();
     }
     cur_left_image.copyTo(pre_left_image);
@@ -125,16 +128,16 @@ int main()
             std::vector<cv::DMatch> matches;
 
             // 特徴点抽出
+            std::cout << "extract feature" << std::endl;
             Feature::compute(cur_left_image, left_keypoints, left_descriptors);
             Feature::compute(cur_right_image, right_keypoints, right_descriptors);
-            std::cout << "1" << std::endl;
 
             // 時間方向対応
-            cv::Mat pre_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
-            for (const MapPoint* mp : mappoints) {
-                cv::vconcat(pre_descriptors, mp->m_descriptor, pre_descriptors);
+            cv::Mat ref_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
+            for (const MapPointPtr mp : mappoints) {
+                cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
             }
-            Feature::matching(left_descriptors, pre_descriptors, matches);
+            Feature::matching(left_descriptors, ref_descriptors, matches);
 
             // 対応のあるCLを追加する
             std::vector<bool> already_pushed(left_keypoints.size(), false);
@@ -146,28 +149,34 @@ int main()
             }
 
             // 追加のされなかったmappointを消す
-            for (std::vector<MapPoint*>::iterator it = mappoints.begin(); it != mappoints.end();) {
+            for (std::vector<MapPointPtr>::iterator it = mappoints.begin(); it != mappoints.end();) {
                 if ((*it)->enable(CL)) {
                     it++;
                     continue;
                 }
-
-                // NOTE: なら，shared_ptrを使えばいいのに
-                delete *it;
                 it = mappoints.erase(it);
             }
 
-            // CLしかないものも追加
             for (size_t i = 0; i < left_keypoints.size(); i++) {
                 if (already_pushed.at(i))
                     continue;
-                MapPoint* mp = new MapPoint(left_descriptors.row(i), left_keypoints.at(i));
+                MapPointPtr mp = std::make_shared<MapPoint>(left_descriptors.row(i), left_keypoints.at(i));
                 mappoints.push_back(mp);
             }
 
-            std::cout << "2" << std::endl;
+            std::cout << "space matching" << std::endl;
+            // 特徴量記述子の再編成
+            ref_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
+            for (const MapPointPtr mp : mappoints) {
+                cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
+            }
             // 空間方向対応
-            Feature::matching(left_descriptors, right_descriptors, matches);
+            Feature::matching(right_descriptors, ref_descriptors, matches);
+            for (const cv::DMatch& match : matches) {
+                int query = match.queryIdx;
+                int train = match.trainIdx;
+                mappoints.at(train)->setCurRight(right_keypoints.at(query));
+            }
         }
 
         // Epipolar
@@ -189,27 +198,27 @@ int main()
             const cv::Point2f OFFSET_CL(0, size.height);
             const cv::Point2f OFFSET_CR(size.width, size.height);
 
-            for (const MapPoint* p : mappoints) {
+            for (const MapPointPtr p : mappoints) {
                 if (p->enable(PL))
-                    cv::circle(show, p->preLeft() + OFFSET_PL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->preLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
                 if (p->enable(PR))
                     cv::circle(show, p->preRight() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p->triangulatable()) {
-                    cv::line(show, p->curRight() + OFFSET_CR, p->curLeft() + OFFSET_CR, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
-                }
-                if (p->motionEstimatable())
-                    cv::line(show, p->preLeft() + OFFSET_PL, p->curLeft() + OFFSET_CL, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
                 if (p->enable(CL))
                     cv::circle(show, p->curLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
                 if (p->enable(CR))
-                    cv::circle(show, p->curRight() + OFFSET_CR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->curRight() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+
+                if (p->triangulatable())
+                    cv::line(show, p->curRight() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(255, 255, 0), 1, cv::LineTypes::LINE_AA);
+                if (p->motionEstimatable())
+                    cv::line(show, p->preLeft() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(0, 255, 255), 1, cv::LineTypes::LINE_AA);
             }
             cv::imshow(Params::WINDOW_NAME, show);
             cv::waitKey(0);
         }
 
         // 更新
-        for (MapPoint* mp : mappoints) {
+        for (MapPointPtr mp : mappoints) {
             mp->update();
         }
         cur_left_image.copyTo(pre_left_image);

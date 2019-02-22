@@ -13,6 +13,7 @@ int descriptorType();
 void matching(
     const cv::Mat& descriptors1,
     const cv::Mat& descriptors2,
-    std::vector<cv::DMatch>& matches);
+    std::vector<cv::DMatch>& matches,
+    const float ratio = 0.7f);
 
 }  // namespace Feature
