@@ -6,9 +6,13 @@ namespace Feature
 cv::Ptr<cv::FeatureDetector> detector;
 cv::Ptr<cv::DescriptorMatcher> matcher;
 
+
+int descriptorSize() { return detector->descriptorSize(); }
+int descriptorType() { return detector->descriptorType(); }
+
 void init()
 {
-    // NOTE: Paramsで色々変えられるようにする
+    // TODO: Paramsで色々変えられるようにする
     detector = cv::AKAZE::create();
     matcher = cv::BFMatcher::create(detector->defaultNorm());
     std::cout << "Feature type: " << detector->getDefaultName() << std::endl;

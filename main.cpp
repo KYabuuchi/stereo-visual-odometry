@@ -16,6 +16,11 @@ const int CUR = 5;
 class MapPoint
 {
 public:
+    // 特徴量記述子とCL
+    MapPoint(cv::Mat descriptor, cv::Point2f cur_left)
+        : m_descriptor(descriptor), m_feature{cv::Point2f(-1, -1), cv::Point2f(-1, -1), cur_left, cv::Point2f(-1, -1)},
+          m_cur_struct(cv::Point3f(-1, -1, -1)), m_pre_struct(cv::Point3f(-1, -1, -1)) {}
+
     // 特徴量記述子とCLとCR
     MapPoint(cv::Mat descriptor, cv::Point2f cur_left, cv::Point2f cur_right)
         : m_descriptor(descriptor), m_feature{cv::Point2f(-1, -1), cv::Point2f(-1, -1), cur_left, cur_right},
@@ -48,10 +53,13 @@ public:
         return m_feature.at(id).x >= 0;
     }
 
-    cv::Point2f pre_left() const { return m_feature.at(PL); }
-    cv::Point2f pre_right() const { return m_feature.at(PR); }
-    cv::Point2f cur_left() const { return m_feature.at(CL); }
-    cv::Point2f cur_right() const { return m_feature.at(CR); }
+    void setCurLeft(cv::Point2f kp) { m_feature.at(CL) = kp; }
+    void setCurRight(cv::Point2f kp) { m_feature.at(CR) = kp; }
+
+    cv::Point2f preLeft() const { return m_feature.at(PL); }
+    cv::Point2f preRight() const { return m_feature.at(PR); }
+    cv::Point2f curLeft() const { return m_feature.at(CL); }
+    cv::Point2f curRight() const { return m_feature.at(CR); }
 
     // 特徴量記述子
     const cv::Mat m_descriptor;
@@ -76,29 +84,28 @@ int main()
         return -1;
 
     // 各視点での特徴点
-    std::vector<MapPoint> mappoints;
+    std::vector<MapPoint*> mappoints;
     mappoints.reserve(500 * 2);
 
     {
-        std::vector<cv::Point2f> keypoints1;
-        std::vector<cv::Point2f> keypoints2;
-        cv::Mat descriptor1, descriptor2;
+        std::vector<cv::Point2f> left_keypoints, right_keypoints;
+        cv::Mat left_descriptors, right_descriptors;
         std::vector<cv::DMatch> matches;
 
-        Feature::compute(cur_left_image, keypoints1, descriptor1);
-        Feature::compute(cur_right_image, keypoints2, descriptor2);
-        Feature::matching(descriptor1, descriptor2, matches);
+        Feature::compute(cur_left_image, left_keypoints, left_descriptors);
+        Feature::compute(cur_right_image, right_keypoints, right_descriptors);
+        Feature::matching(left_descriptors, right_descriptors, matches);
         for (size_t i = 0; i < matches.size(); i++) {
             int query = matches.at(i).queryIdx;
             int train = matches.at(i).trainIdx;
-            MapPoint mp(descriptor1.row(query), keypoints1.at(query), keypoints2.at(train));
+            MapPoint* mp = new MapPoint(left_descriptors.row(query), left_keypoints.at(query), right_keypoints.at(train));
             mappoints.push_back(mp);
         }
     }
 
     // 更新
-    for (MapPoint mp : mappoints) {
-        mp.update();
+    for (MapPoint* mp : mappoints) {
+        mp->update();
     }
     cur_left_image.copyTo(pre_left_image);
     cur_right_image.copyTo(pre_right_image);
@@ -113,27 +120,54 @@ int main()
             return -1;
         }
         {
-            std::vector<cv::Point2f> keypoints1;
-            std::vector<cv::Point2f> keypoints2;
-            cv::Mat descriptor1, descriptor2;
+            std::vector<cv::Point2f> left_keypoints, right_keypoints;
+            cv::Mat left_descriptors, right_descriptors;
             std::vector<cv::DMatch> matches;
 
             // 特徴点抽出
-            Feature::compute(cur_left_image, keypoints1, descriptor1);
-            Feature::compute(cur_right_image, keypoints2, descriptor2);
-            std::cout << "image" << std::endl;
+            Feature::compute(cur_left_image, left_keypoints, left_descriptors);
+            Feature::compute(cur_right_image, right_keypoints, right_descriptors);
+            std::cout << "1" << std::endl;
 
             // 時間方向対応
-            Feature::matching(descriptor1, descriptor2, matches);
-            for (size_t i = 0; i < matches.size(); i++) {
-                int query = matches.at(i).queryIdx;
-                int train = matches.at(i).trainIdx;
-                MapPoint mp(descriptor1.row(query), keypoints1.at(query), keypoints2.at(train));
+            cv::Mat pre_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
+            for (const MapPoint* mp : mappoints) {
+                cv::vconcat(pre_descriptors, mp->m_descriptor, pre_descriptors);
+            }
+            Feature::matching(left_descriptors, pre_descriptors, matches);
+
+            // 対応のあるCLを追加する
+            std::vector<bool> already_pushed(left_keypoints.size(), false);
+            for (const cv::DMatch& match : matches) {
+                int query = match.queryIdx;
+                int train = match.trainIdx;
+                mappoints.at(train)->setCurLeft(left_keypoints.at(query));
+                already_pushed.at(query) = true;
+            }
+
+            // 追加のされなかったmappointを消す
+            for (std::vector<MapPoint*>::iterator it = mappoints.begin(); it != mappoints.end();) {
+                if ((*it)->enable(CL)) {
+                    it++;
+                    continue;
+                }
+
+                // NOTE: なら，shared_ptrを使えばいいのに
+                delete *it;
+                it = mappoints.erase(it);
+            }
+
+            // CLしかないものも追加
+            for (size_t i = 0; i < left_keypoints.size(); i++) {
+                if (already_pushed.at(i))
+                    continue;
+                MapPoint* mp = new MapPoint(left_descriptors.row(i), left_keypoints.at(i));
                 mappoints.push_back(mp);
             }
-            std::cout << "image" << std::endl;
 
+            std::cout << "2" << std::endl;
             // 空間方向対応
+            Feature::matching(left_descriptors, right_descriptors, matches);
         }
 
         // Epipolar
@@ -155,25 +189,28 @@ int main()
             const cv::Point2f OFFSET_CL(0, size.height);
             const cv::Point2f OFFSET_CR(size.width, size.height);
 
-            for (const auto& p : mappoints) {
-                if (p.enable(PL))
-                    cv::circle(show, p.pre_left() + OFFSET_PL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p.enable(PR))
-                    cv::circle(show, p.pre_right() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p.triangulatable())
-                    cv::line(show, p.pre_right() + OFFSET_PR, p.pre_left() + OFFSET_PL, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
-                if (p.enable(CL))
-                    cv::circle(show, p.cur_left() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p.enable(CR))
-                    cv::circle(show, p.cur_right() + OFFSET_CR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+            for (const MapPoint* p : mappoints) {
+                if (p->enable(PL))
+                    cv::circle(show, p->preLeft() + OFFSET_PL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p->enable(PR))
+                    cv::circle(show, p->preRight() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p->triangulatable()) {
+                    cv::line(show, p->curRight() + OFFSET_CR, p->curLeft() + OFFSET_CR, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
+                }
+                if (p->motionEstimatable())
+                    cv::line(show, p->preLeft() + OFFSET_PL, p->curLeft() + OFFSET_CL, CV_RGB(255, 0, 0), 1, cv::LineTypes::LINE_AA);
+                if (p->enable(CL))
+                    cv::circle(show, p->curLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                if (p->enable(CR))
+                    cv::circle(show, p->curRight() + OFFSET_CR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
             }
             cv::imshow(Params::WINDOW_NAME, show);
             cv::waitKey(0);
         }
 
         // 更新
-        for (MapPoint mp : mappoints) {
-            mp.update();
+        for (MapPoint* mp : mappoints) {
+            mp->update();
         }
         cur_left_image.copyTo(pre_left_image);
         cur_right_image.copyTo(pre_right_image);
