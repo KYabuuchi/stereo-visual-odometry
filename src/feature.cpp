@@ -47,6 +47,7 @@ void matching(
         matches.push_back(knn_matches[i][0]);
     }
 
+    // NOTE: そうでもない
     //knn_matches.clear();
     //matcher->knnMatch(descriptors2, descriptors1, knn_matches, 2, cv::noArray());
     //for (size_t i = 0; i < knn_matches.size(); i++) {

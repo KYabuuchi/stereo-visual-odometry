@@ -14,6 +14,6 @@ void matching(
     const cv::Mat& descriptors1,
     const cv::Mat& descriptors2,
     std::vector<cv::DMatch>& matches,
-    const float ratio = 0.7f);
+    const float ratio = 0.6f);
 
 }  // namespace Feature
