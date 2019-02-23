@@ -21,7 +21,7 @@ cv::Mat calcPose(
     const std::vector<cv::Point2f>& cur_left,
     const std::vector<cv::Point2f>& pre_left)
 {
-    cv::Mat T = (cv::Mat_<double>(4, 4) << 1, 0, 0, 0,
+    cv::Mat T = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
         0, 0, 0, 1);

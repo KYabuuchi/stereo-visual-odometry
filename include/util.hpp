@@ -64,6 +64,8 @@ public:
     cv::Point2f preRight() const { return m_feature.at(PR); }
     cv::Point2f curLeft() const { return m_feature.at(CL); }
     cv::Point2f curRight() const { return m_feature.at(CR); }
+    cv::Point3f curStruct() const { return m_cur_struct; }
+    cv::Point3f preStruct() const { return m_pre_struct; }
 
     // 特徴量記述子
     const cv::Mat m_descriptor;
