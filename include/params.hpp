@@ -7,8 +7,10 @@ namespace Params
 extern const int MAX_FILE_NUM;
 extern const std::string WINDOW_NAME;
 
+// 内部行列・外部行列・射影行列(左)・射影行列(右)
 extern const cv::Mat1f ZED_INTRINSIC;
 extern const cv::Mat1f ZED_EXTRINSIC;
 extern const cv::Mat1f ZED_PERSPECTIVE_LEFT;
 extern const cv::Mat1f ZED_PERSPECTIVE_RIGHT;
+
 }  // namespace Params

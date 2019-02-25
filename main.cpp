@@ -6,7 +6,6 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-typedef std::shared_ptr<MapPoint> MapPointPtr;
 
 int main()
 {
@@ -38,6 +37,7 @@ int main()
             MapPointPtr mp = std::make_shared<MapPoint>(left_descriptors.row(query), left_keypoints.at(query), right_keypoints.at(train));
             mappoints.push_back(mp);
         }
+        triangulate(mappoints);
     }
 
     // 更新
@@ -117,7 +117,7 @@ int main()
             }
         }
 
-        // Epipolar
+        // calc Epipolar Equation
         cv::Mat T;
         {
             std::vector<cv::Point2f> cur_left, pre_left;
@@ -130,39 +130,17 @@ int main()
             T = calcPose(cur_left, pre_left);
         }
 
-        // 三角測量
         {
-            std::vector<cv::Point2f> cur_left, cur_right;
-            for (const MapPointPtr mp : mappoints) {
-                if (not mp->triangulatable())
-                    continue;
-                cur_left.push_back(mp->curLeft());
-                cur_right.push_back(mp->curRight());
-            }
-            cv::Mat homo3d, tmp;
-            cv::triangulatePoints(
-                Params::ZED_PERSPECTIVE_LEFT,
-                Params::ZED_PERSPECTIVE_RIGHT,
-                cur_left, cur_right, homo3d);                   // 4xN(1ch)
-            cv::convertPointsFromHomogeneous(homo3d.t(), tmp);  // Nx4(1ch) -> Nx1(3ch)
-            cv::convertPointsToHomogeneous(tmp, tmp);           // Nx1(3ch) -> Nx1(4ch)
-            tmp = tmp.reshape(1);                               // Nx1(4ch) -> Nx4(1ch)
-            tmp = tmp.t();                                      // Nx4(1ch) -> 4xN(1ch)
-            tmp = tmp.rowRange(0, 3);                           // 4xN(1ch) -> 3xN(1ch)
-            //std::cout << tmp.col(0) << std::endl;
+            // 三角測量
+            triangulate(mappoints);
         }
 
-        // スケールの計算
         float scale = 1;
         {
-            std::vector<cv::Point3f> pre_struct, cur_struct;
-            for (const MapPointPtr mp : mappoints) {
-                if (not mp->scaleEstimatable())
-                    continue;
-                cur_struct.push_back(mp->curStruct());
-                pre_struct.push_back(mp->preStruct());
-            }
+            // スケールの計算
+            scale = calcScale(mappoints, T.colRange(0, 3).rowRange(0, 3));
         }
+
         std::cout << "\nTranslation " << scale << "\n"
                   << T << "\n"
                   << std::endl;

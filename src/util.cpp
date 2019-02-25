@@ -34,3 +34,49 @@ cv::Mat calcPose(
 
     return T;
 }
+
+float calcScale(std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
+{
+    cv::Point3f pre(0, 0, 0);
+    cv::Point3f cur(0, 0, 0);
+    int num = 0;
+    for (const MapPointPtr mp : mappoints) {
+        if (not mp->scaleEstimatable())
+            continue;
+        cur += mp->curStruct();
+        pre += mp->preStruct();
+        num++;
+    }
+
+    if (num > 0) {
+        cv::Mat pre_point(pre / num);
+        cv::Mat cur_point(cur / num);
+        return cv::norm(pre_point - R * cur_point);
+    }
+    return 0.0f;
+}
+
+bool triangulate(std::vector<MapPointPtr>& mappoints)
+{
+    std::vector<cv::Point2f> cur_left, cur_right;
+    std::vector<MapPointPtr> triangulatable_points;
+    for (const MapPointPtr mp : mappoints) {
+        if (not mp->triangulatable())
+            continue;
+        cur_left.push_back(mp->curLeft());
+        cur_right.push_back(mp->curRight());
+        triangulatable_points.push_back(mp);
+    }
+    cv::Mat homo3d, tmp;
+    cv::triangulatePoints(
+        Params::ZED_PERSPECTIVE_LEFT,
+        Params::ZED_PERSPECTIVE_RIGHT,
+        cur_left, cur_right, homo3d);  // 4xN(1ch)
+
+    cv::convertPointsFromHomogeneous(homo3d.t(), tmp);  // Nx4(1ch) -> Nx1(3ch)
+    tmp = tmp.reshape(1);                               // Nx3(4ch) -> Nx3(1ch)
+    tmp = tmp.t();                                      // Nx3(1ch) -> 3xN(1ch)
+    for (size_t i = 0; i < tmp.cols; i++) {
+        triangulatable_points.at(i)->setCurStruct(cv::Point3f(tmp.col(i)));
+    }
+}
