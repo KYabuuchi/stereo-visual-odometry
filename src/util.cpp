@@ -16,11 +16,16 @@ bool readImage(int file_num, cv::Mat& src1, cv::Mat& src2)
     return true;
 }
 
-
-cv::Mat calcPose(
-    const std::vector<cv::Point2f>& cur_left,
-    const std::vector<cv::Point2f>& pre_left)
+cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints)
 {
+    std::vector<cv::Point2f> cur_left, pre_left;
+    for (const MapPointPtr mp : mappoints) {
+        if (not mp->motionEstimatable())
+            continue;
+        cur_left.push_back(mp->curLeft());
+        pre_left.push_back(mp->preLeft());
+    }
+
     cv::Mat T = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
@@ -35,7 +40,7 @@ cv::Mat calcPose(
     return T;
 }
 
-float calcScale(std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
+float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
 {
     cv::Point3f pre(0, 0, 0);
     cv::Point3f cur(0, 0, 0);
@@ -56,7 +61,7 @@ float calcScale(std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
     return 0.0f;
 }
 
-bool triangulate(std::vector<MapPointPtr>& mappoints)
+int triangulate(std::vector<MapPointPtr>& mappoints)
 {
     std::vector<cv::Point2f> cur_left, cur_right;
     std::vector<MapPointPtr> triangulatable_points;
@@ -79,4 +84,6 @@ bool triangulate(std::vector<MapPointPtr>& mappoints)
     for (size_t i = 0; i < tmp.cols; i++) {
         triangulatable_points.at(i)->setCurStruct(cv::Point3f(tmp.col(i)));
     }
+
+    return triangulatable_points.size();
 }

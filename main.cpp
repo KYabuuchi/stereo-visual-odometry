@@ -1,4 +1,5 @@
 #include "feature.hpp"
+#include "map.hpp"
 #include "params.hpp"
 #include "util.hpp"
 #include "viewer.hpp"
@@ -6,12 +7,11 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-
 int main()
 {
     // 初期化
-    Viewer::init();
     Feature::init();
+    Viewer viewer;
 
     cv::Mat cur_left_image, cur_right_image;
     cv::Mat pre_left_image, pre_right_image;
@@ -117,72 +117,31 @@ int main()
             }
         }
 
-        // calc Epipolar Equation
-        cv::Mat T;
-        {
-            std::vector<cv::Point2f> cur_left, pre_left;
-            for (const MapPointPtr mp : mappoints) {
-                if (not mp->motionEstimatable())
-                    continue;
-                cur_left.push_back(mp->curLeft());
-                pre_left.push_back(mp->preLeft());
-            }
-            T = calcPose(cur_left, pre_left);
-        }
+        // Epipolar Equation
+        cv::Mat T = calcPose(mappoints);
 
-        {
-            // 三角測量
-            triangulate(mappoints);
-        }
+        // 三角測量
+        int triangulatable_num = triangulate(mappoints);
+        std::cout << triangulatable_num << " points are used to triangulate" << std::endl;
 
-        float scale = 1;
-        {
-            // スケールの計算
-            scale = calcScale(mappoints, T.colRange(0, 3).rowRange(0, 3));
-        }
+        // スケールの計算
+        float scale = calcScale(mappoints, T.colRange(0, 3).rowRange(0, 3));
 
         std::cout << "\nTranslation " << scale << "\n"
                   << T << "\n"
                   << std::endl;
 
         // 描画
-        {
-            cv::Mat show, merge1, merge2;
-            cv::hconcat(pre_left_image, pre_right_image, merge1);
-            cv::hconcat(cur_left_image, cur_right_image, merge2);
-            cv::vconcat(merge1, merge2, show);
-
-            const cv::Size size = cur_left_image.size();
-            const cv::Point2f OFFSET_PL(0, 0);
-            const cv::Point2f OFFSET_PR(size.width, 0);
-            const cv::Point2f OFFSET_CL(0, size.height);
-            const cv::Point2f OFFSET_CR(size.width, size.height);
-
-            for (const MapPointPtr p : mappoints) {
-                if (p->enable(PL))
-                    cv::circle(show, p->preLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p->enable(PR))
-                    cv::circle(show, p->preRight() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p->enable(CL))
-                    cv::circle(show, p->curLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-                if (p->enable(CR))
-                    cv::circle(show, p->curRight() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
-
-                if (p->triangulatable())
-                    cv::line(show, p->curRight() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(255, 255, 0), 1, cv::LineTypes::LINE_AA);
-                if (p->motionEstimatable())
-                    cv::line(show, p->preLeft() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(0, 255, 255), 1, cv::LineTypes::LINE_AA);
-            }
-            cv::imshow(Params::WINDOW_NAME, show);
-        }
+        viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, mappoints);
 
         // 更新
         for (MapPointPtr mp : mappoints) {
             mp->update();
         }
-        cur_left_image.copyTo(pre_left_image);
-        cur_right_image.copyTo(pre_right_image);
+        pre_left_image = std::move(cur_left_image);
+        pre_right_image = std::move(cur_right_image);
 
+        // wait
         key = cv::waitKey(0);
     }
 

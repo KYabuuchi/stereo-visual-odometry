@@ -2,7 +2,6 @@
 
 namespace Params
 {
-const std::string WINDOW_NAME = "window";
 
 // 画像の最大数
 const int MAX_FILE_NUM = 8;
