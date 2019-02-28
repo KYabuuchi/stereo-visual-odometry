@@ -9,7 +9,6 @@
 
 int main()
 {
-    // 初期化
     Feature::init();
     Viewer viewer;
 
@@ -118,17 +117,16 @@ int main()
         }
 
         // Epipolar Equation
-        cv::Mat T = calcPose(mappoints);
+        cv::Mat Tcw = calcPose(mappoints);
 
         // 三角測量
-        int triangulatable_num = triangulate(mappoints);
-        std::cout << triangulatable_num << " points are used to triangulate" << std::endl;
+        triangulate(mappoints);
 
         // スケールの計算
-        float scale = calcScale(mappoints, T.colRange(0, 3).rowRange(0, 3));
+        float scale = calcScale(mappoints, Tcw.colRange(0, 3).rowRange(0, 3));
 
-        std::cout << "\nTranslation " << scale << "\n"
-                  << T << "\n"
+        std::cout << "\nPose" << scale << "\n"
+                  << Tcw << "\n"
                   << std::endl;
 
         // 描画
@@ -142,7 +140,8 @@ int main()
         pre_right_image = std::move(cur_right_image);
 
         // wait
-        key = cv::waitKey(0);
+        key = viewer.waitKeyEver();
+        std::cout << "key: " << key << std::endl;
     }
 
     std::cout << "shut down" << std::endl;

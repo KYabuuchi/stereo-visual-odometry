@@ -3,16 +3,12 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-namespace
-{
 const int PL = 0;
 const int PR = 1;
 const int CL = 2;
 const int CR = 3;
 const int P3 = 4;
 const int C3 = 5;
-}  // namespace
-
 
 class MapPoint
 {
