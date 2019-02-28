@@ -12,18 +12,28 @@ Viewer::Viewer()
 
 Viewer::~Viewer() { stop(); }
 
+void Viewer::reset() { m_reset_requested = true; }
+void Viewer::stop() { m_stop_requested = true; }
+
 void Viewer::update(
     const std::array<cv::Mat, 4>& images,
     const std::vector<MapPointPtr>& mappoints)
 {
-    std::lock_guard lock(m_mutex);
-    m_mappoints = mappoints;
-    m_images = images;
-    m_update_called = true;
+    {
+        std::lock_guard lock(m_mutex);
+        m_mappoints.clear();
+        for (const MapPointPtr point : mappoints) {
+            m_mappoints.push_back(std::make_shared<MapPoint>(*point));
+        }
+        m_images = images;
+        m_update_called = true;
+    }
+    for (cv::Mat& image : m_images) {
+        if (image.empty())
+            image = cv::Mat::zeros(Params::ZED_RESOLUTION, CV_8UC3);
+    }
 }
 
-void Viewer::reset() { m_reset_requested = true; }
-void Viewer::stop() { m_stop_requested = true; }
 
 int Viewer::waitKeyEver()
 {
@@ -34,10 +44,9 @@ int Viewer::waitKeyEver()
 void Viewer::drawLoop()
 {
     cv::namedWindow(m_window_name, cv::WINDOW_NORMAL);
-    cv::resizeWindow(m_window_name, 640, 480);
+    cv::resizeWindow(m_window_name, 640 * 2, 480 * 2);
 
     while (1) {
-
         bool update = false;
         {
             std::lock_guard lock(m_mutex);
@@ -59,13 +68,13 @@ void Viewer::drawLoop()
 
             for (const MapPointPtr p : m_mappoints) {
                 if (p->enable(PL))
-                    cv::circle(show, p->preLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->preLeft() + OFFSET_PL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
                 if (p->enable(PR))
-                    cv::circle(show, p->preRight() + OFFSET_PR, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->preRight() + OFFSET_PR, 1, CV_RGB(0, 255, 0), 0, cv::LineTypes::LINE_AA);
                 if (p->enable(CL))
-                    cv::circle(show, p->curLeft() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->curLeft() + OFFSET_CL, 1, CV_RGB(155, 0, 0), 0, cv::LineTypes::LINE_AA);
                 if (p->enable(CR))
-                    cv::circle(show, p->curRight() + OFFSET_CL, 1, CV_RGB(255, 0, 0), 0, cv::LineTypes::LINE_AA);
+                    cv::circle(show, p->curRight() + OFFSET_CR, 1, CV_RGB(0, 155, 0), 0, cv::LineTypes::LINE_AA);
 
                 if (p->triangulatable())
                     cv::line(show, p->curRight() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(255, 255, 0), 1, cv::LineTypes::LINE_AA);

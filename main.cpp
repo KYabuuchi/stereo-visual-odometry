@@ -12,66 +12,49 @@ int main()
     Feature feature;
     Viewer viewer;
 
-    cv::Mat cur_left_image, cur_right_image;
-    cv::Mat pre_left_image, pre_right_image;
-
-    if (not readImage(1, cur_left_image, cur_right_image))
-        return -1;
-
-    // 各視点での特徴点
     std::vector<std::shared_ptr<MapPoint>> mappoints;
     mappoints.reserve(500 * 2);
 
-    {
+    cv::Mat cur_left_image, cur_right_image;
+    cv::Mat pre_left_image, pre_right_image;
+
+    int image_num = 1;
+    int key = -1;
+    bool initialize_done = false;
+
+    // Main Loop
+    while (key != 'q') {
+
+        // 画像取得
+        if (not readImage(image_num++, cur_left_image, cur_right_image)) {
+            std::cout << "loop" << std::endl;
+
+            image_num = 1;
+            initialize_done = false;
+            pre_left_image.release();
+            pre_right_image.release();
+            continue;
+        }
+
         std::vector<cv::Point2f> left_keypoints, right_keypoints;
         cv::Mat left_descriptors, right_descriptors;
         std::vector<cv::DMatch> matches;
 
+        // 特徴点抽出
         feature.compute(cur_left_image, left_keypoints, left_descriptors);
         feature.compute(cur_right_image, right_keypoints, right_descriptors);
-        feature.matching(left_descriptors, right_descriptors, matches);
 
-        initializeMapPoints(mappoints, matches, left_descriptors, right_descriptors, left_keypoints, right_keypoints);
-        triangulate(mappoints);
-
-        for (MapPointPtr mp : mappoints) {
-            mp->update();
-        }
-        cur_left_image.copyTo(pre_left_image);
-        cur_right_image.copyTo(pre_right_image);
-    }
-
-
-    int image_num = 2;
-    int key = -1;
-
-    // Main Loop
-    while (key != 'q') {
-        std::cout << "mappoints has " << mappoints.size() << " elements" << std::endl;
-
-        // 画像取得
-        if (not readImage(image_num++, cur_left_image, cur_right_image)) {
-            std::cout << "cannot read image" << std::endl;
-
-            // NOTE: 無理やりループ
-            image_num = 2;
-            continue;
-        }
-
-        {
-            std::vector<cv::Point2f> left_keypoints, right_keypoints;
-            cv::Mat left_descriptors, right_descriptors;
-            std::vector<cv::DMatch> matches;
-
-            // 特徴点抽出
-            feature.compute(cur_left_image, left_keypoints, left_descriptors);
-            feature.compute(cur_right_image, right_keypoints, right_descriptors);
-
+        if (not initialize_done) {
+            // 初期化
+            feature.matching(left_descriptors, right_descriptors, matches);
+            initializeMapPoints(mappoints, matches, left_descriptors, right_descriptors, left_keypoints, right_keypoints);
+            initialize_done = true;
+        } else {
             // CL-PL対応
             cv::Mat ref_descriptors = concatenateDescriptors(mappoints, feature);
             feature.matching(left_descriptors, ref_descriptors, matches);
 
-            // 対応のあるCLを追加する
+            // CLを追加する
             std::vector<bool> already_pushed(left_keypoints.size(), false);
             for (const cv::DMatch& match : matches) {
                 mappoints.at(match.trainIdx)->setCurLeft(left_keypoints.at(match.queryIdx));
@@ -90,7 +73,7 @@ int main()
             // まだ追加されていない分をmappointを追加
             for (size_t i = 0; i < left_keypoints.size(); i++) {
                 if (not already_pushed.at(i))
-                    mappoints.push_back(std::make_shared<MapPoint>(left_descriptors.row(i), left_keypoints.at(i)));
+                    mappoints.push_back(std::make_shared<MapPoint>(left_descriptors.row(static_cast<int>(i)), left_keypoints.at(static_cast<int>(i))));
             }
 
             // CR-CL対応
@@ -110,12 +93,11 @@ int main()
         // スケールの計算
         float scale = calcScale(mappoints, Tcw.colRange(0, 3).rowRange(0, 3));
 
+        // 描画
+        viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, mappoints);
         std::cout << "\nPose" << scale << "\n"
                   << Tcw << "\n"
                   << std::endl;
-
-        // 描画
-        viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, mappoints);
 
         // 更新
         for (MapPointPtr mp : mappoints) {
@@ -128,5 +110,6 @@ int main()
         key = viewer.waitKeyEver();
     }
 
+    viewer.stop();
     std::cout << "shut down" << std::endl;
 }

@@ -11,13 +11,13 @@ bool readImage(int file_num, cv::Mat& src1, cv::Mat& src2);
 cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints);
 
 // 3角測量可能な点について，三角測量する
-int triangulate(std::vector<MapPointPtr>& mappoints);
+size_t triangulate(std::vector<MapPointPtr>& mappoints);
 
 // 3次元座標の移動量から並進ベクトルの大きさを計算する
 float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R);
 
 // 一番最初のMapPoint作り
-int initializeMapPoints(
+size_t initializeMapPoints(
     std::vector<MapPointPtr>& mappoints,
     const std::vector<cv::DMatch>& matches,
     const cv::Mat& left_descriptors,
