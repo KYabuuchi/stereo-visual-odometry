@@ -1,4 +1,5 @@
 #pragma once
+#include "feature.hpp"
 #include "map.hpp"
 #include <memory>
 #include <opencv2/opencv.hpp>
@@ -14,3 +15,16 @@ int triangulate(std::vector<MapPointPtr>& mappoints);
 
 // 3次元座標の移動量から並進ベクトルの大きさを計算する
 float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R);
+
+// 一番最初のMapPoint作り
+int initializeMapPoints(
+    std::vector<MapPointPtr>& mappoints,
+    const std::vector<cv::DMatch>& matches,
+    const cv::Mat& left_descriptors,
+    const cv::Mat& right_descriptors,
+    const std::vector<cv::Point2f>& left_keypoints,
+    const std::vector<cv::Point2f>& right_keypoints);
+
+cv::Mat concatenateDescriptors(
+    const std::vector<MapPointPtr> mappoints,
+    const Feature& feature);

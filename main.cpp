@@ -9,7 +9,7 @@
 
 int main()
 {
-    Feature::init();
+    Feature feature;
     Viewer viewer;
 
     cv::Mat cur_left_image, cur_right_image;
@@ -27,24 +27,20 @@ int main()
         cv::Mat left_descriptors, right_descriptors;
         std::vector<cv::DMatch> matches;
 
-        Feature::compute(cur_left_image, left_keypoints, left_descriptors);
-        Feature::compute(cur_right_image, right_keypoints, right_descriptors);
-        Feature::matching(left_descriptors, right_descriptors, matches);
-        for (size_t i = 0; i < matches.size(); i++) {
-            int query = matches.at(i).queryIdx;
-            int train = matches.at(i).trainIdx;
-            MapPointPtr mp = std::make_shared<MapPoint>(left_descriptors.row(query), left_keypoints.at(query), right_keypoints.at(train));
-            mappoints.push_back(mp);
-        }
+        feature.compute(cur_left_image, left_keypoints, left_descriptors);
+        feature.compute(cur_right_image, right_keypoints, right_descriptors);
+        feature.matching(left_descriptors, right_descriptors, matches);
+
+        initializeMapPoints(mappoints, matches, left_descriptors, right_descriptors, left_keypoints, right_keypoints);
         triangulate(mappoints);
+
+        for (MapPointPtr mp : mappoints) {
+            mp->update();
+        }
+        cur_left_image.copyTo(pre_left_image);
+        cur_right_image.copyTo(pre_right_image);
     }
 
-    // 更新
-    for (MapPointPtr mp : mappoints) {
-        mp->update();
-    }
-    cur_left_image.copyTo(pre_left_image);
-    cur_right_image.copyTo(pre_right_image);
 
     int image_num = 2;
     int key = -1;
@@ -56,7 +52,10 @@ int main()
         // 画像取得
         if (not readImage(image_num++, cur_left_image, cur_right_image)) {
             std::cout << "cannot read image" << std::endl;
-            return -1;
+
+            // NOTE: 無理やりループ
+            image_num = 2;
+            continue;
         }
 
         {
@@ -65,27 +64,21 @@ int main()
             std::vector<cv::DMatch> matches;
 
             // 特徴点抽出
-            std::cout << "extract feature" << std::endl;
-            Feature::compute(cur_left_image, left_keypoints, left_descriptors);
-            Feature::compute(cur_right_image, right_keypoints, right_descriptors);
+            feature.compute(cur_left_image, left_keypoints, left_descriptors);
+            feature.compute(cur_right_image, right_keypoints, right_descriptors);
 
-            // 時間方向対応
-            std::cout << "time matching" << std::endl;
-            cv::Mat ref_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
-            for (const MapPointPtr mp : mappoints) {
-                cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
-            }
-            Feature::matching(left_descriptors, ref_descriptors, matches);
+            // CL-PL対応
+            cv::Mat ref_descriptors = concatenateDescriptors(mappoints, feature);
+            feature.matching(left_descriptors, ref_descriptors, matches);
 
             // 対応のあるCLを追加する
             std::vector<bool> already_pushed(left_keypoints.size(), false);
             for (const cv::DMatch& match : matches) {
-                int query = match.queryIdx;
-                int train = match.trainIdx;
-                mappoints.at(train)->setCurLeft(left_keypoints.at(query));
-                already_pushed.at(query) = true;
+                mappoints.at(match.trainIdx)->setCurLeft(left_keypoints.at(match.queryIdx));
+                already_pushed.at(match.queryIdx) = true;
             }
-            // 追加のされなかったmappointを消す
+
+            // CLを持たないmappointを消す
             for (std::vector<MapPointPtr>::iterator it = mappoints.begin(); it != mappoints.end();) {
                 if ((*it)->enable(CL)) {
                     it++;
@@ -93,26 +86,18 @@ int main()
                 }
                 it = mappoints.erase(it);
             }
-            // CLしかないものもmappointを追加
+
+            // まだ追加されていない分をmappointを追加
             for (size_t i = 0; i < left_keypoints.size(); i++) {
-                if (already_pushed.at(i))
-                    continue;
-                MapPointPtr mp = std::make_shared<MapPoint>(left_descriptors.row(i), left_keypoints.at(i));
-                mappoints.push_back(mp);
+                if (not already_pushed.at(i))
+                    mappoints.push_back(std::make_shared<MapPoint>(left_descriptors.row(i), left_keypoints.at(i)));
             }
 
-            std::cout << "space matching" << std::endl;
-            // 特徴量記述子の再編成
-            ref_descriptors = cv::Mat(0, Feature::descriptorSize(), Feature::descriptorType());
-            for (const MapPointPtr mp : mappoints) {
-                cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
-            }
-            // 空間方向対応
-            Feature::matching(right_descriptors, ref_descriptors, matches);
+            // CR-CL対応
+            ref_descriptors = concatenateDescriptors(mappoints, feature);
+            feature.matching(right_descriptors, ref_descriptors, matches);
             for (const cv::DMatch& match : matches) {
-                int query = match.queryIdx;
-                int train = match.trainIdx;
-                mappoints.at(train)->setCurRight(right_keypoints.at(query));
+                mappoints.at(match.trainIdx)->setCurRight(right_keypoints.at(match.queryIdx));
             }
         }
 
@@ -141,7 +126,6 @@ int main()
 
         // wait
         key = viewer.waitKeyEver();
-        std::cout << "key: " << key << std::endl;
     }
 
     std::cout << "shut down" << std::endl;

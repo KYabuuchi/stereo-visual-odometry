@@ -87,3 +87,33 @@ int triangulate(std::vector<MapPointPtr>& mappoints)
 
     return triangulatable_points.size();
 }
+
+
+int initializeMapPoints(
+    std::vector<MapPointPtr>& mappoints,
+    const std::vector<cv::DMatch>& matches,
+    const cv::Mat& left_descriptors,
+    const cv::Mat& right_descriptors,
+    const std::vector<cv::Point2f>& left_keypoints,
+    const std::vector<cv::Point2f>& right_keypoints)
+{
+    for (size_t i = 0; i < matches.size(); i++) {
+        int query = matches.at(i).queryIdx;
+        int train = matches.at(i).trainIdx;
+        MapPointPtr mp = std::make_shared<MapPoint>(
+            left_descriptors.row(query),
+            left_keypoints.at(query),
+            right_keypoints.at(train));
+        mappoints.push_back(mp);
+    }
+    return mappoints.size();
+}
+
+cv::Mat concatenateDescriptors(const std::vector<MapPointPtr> mappoints, const Feature& feature)
+{
+    cv::Mat ref_descriptors = cv::Mat(0, feature.descriptorSize(), feature.descriptorType());
+    for (const MapPointPtr& mp : mappoints) {
+        cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
+    }
+    return ref_descriptors;
+}
