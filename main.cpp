@@ -1,16 +1,20 @@
 #include "feature.hpp"
+#include "load.hpp"
 #include "map.hpp"
 #include "params.hpp"
-#include "util.hpp"
+#include "tracking.hpp"
 #include "viewer.hpp"
 #include <iostream>
 #include <memory>
 #include <opencv2/opencv.hpp>
 
+const std::string path_to_data = "../data/VGA10CM";
+
 int main()
 {
     Feature feature;
     Viewer viewer;
+    Loader loader(path_to_data);
 
     std::vector<std::shared_ptr<MapPoint>> mappoints;
     mappoints.reserve(500 * 2);
@@ -18,7 +22,6 @@ int main()
     cv::Mat cur_left_image, cur_right_image;
     cv::Mat pre_left_image, pre_right_image;
 
-    int image_num = 1;
     int key = -1;
     bool initialize_done = false;
 
@@ -26,10 +29,10 @@ int main()
     while (key != 'q') {
 
         // 画像取得
-        if (not readImage(image_num++, cur_left_image, cur_right_image)) {
+        if (not loader.load(cur_left_image, cur_right_image)) {
             std::cout << "loop" << std::endl;
-
-            image_num = 1;
+            loader.reset();
+            viewer.reset();
             initialize_done = false;
             pre_left_image.release();
             pre_right_image.release();
