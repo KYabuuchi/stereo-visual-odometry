@@ -22,6 +22,10 @@ size_t initializeMapPoints(
     const std::vector<cv::Point2f>& left_keypoints,
     const std::vector<cv::Point2f>& right_keypoints);
 
+// 特徴量記述子を重ねる
 cv::Mat concatenateDescriptors(
     const std::vector<MapPointPtr> mappoints,
     const Feature& feature);
+
+// 並進ベクトルをscaling
+void scaleTranslation(cv::Mat1f& T, float scale);

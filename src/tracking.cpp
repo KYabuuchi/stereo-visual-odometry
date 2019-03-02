@@ -3,7 +3,7 @@
 
 cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints)
 {
-    cv::Mat T = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
+    cv::Mat1f T = (cv::Mat_<float>(4, 4) << 1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
         0, 0, 0, 1);
@@ -70,7 +70,12 @@ size_t triangulate(std::vector<MapPointPtr>& mappoints)
     tmp = tmp.reshape(1);                               // Nx3(4ch) -> Nx3(1ch)
     tmp = tmp.t();                                      // Nx3(1ch) -> 3xN(1ch)
     for (int i = 0; i < tmp.cols; i++) {
-        triangulatable_points.at(i)->setCurStruct(cv::Point3f(tmp.col(i)));
+        cv::Point3f p = cv::Point3f(tmp.col(i));
+        if (p.z < 0) {
+            std::cerr << "negative depth" << std::endl;
+            p = -p;
+        }
+        triangulatable_points.at(i)->setCurStruct(p);
     }
 
     return triangulatable_points.size();
@@ -105,4 +110,14 @@ cv::Mat concatenateDescriptors(const std::vector<MapPointPtr> mappoints, const F
         cv::vconcat(ref_descriptors, mp->m_descriptor, ref_descriptors);
     }
     return ref_descriptors;
+}
+
+void scaleTranslation(cv::Mat1f& T, float scale)
+{
+    cv::Mat1f translation = T.rowRange(0, 3).col(3);
+    float norm = static_cast<float>(cv::norm(translation));
+    if (norm < 1e-6f)
+        return;
+    translation = translation / norm * scale;
+    translation.copyTo(T.rowRange(0, 3).col(3));
 }

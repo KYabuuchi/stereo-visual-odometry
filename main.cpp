@@ -8,34 +8,35 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-const std::string path_to_data = "../data/VGA10CM";
-
 int main()
 {
     Feature feature;
     Viewer viewer;
-    Loader loader(path_to_data);
+    Loader loader("../data/VGA10CM");
 
     std::vector<std::shared_ptr<MapPoint>> mappoints;
-    mappoints.reserve(500 * 2);
-
     cv::Mat cur_left_image, cur_right_image;
     cv::Mat pre_left_image, pre_right_image;
 
     int key = -1;
     bool initialize_done = false;
 
+    // camera pose
+    cv::Mat1f Tcw(cv::Mat1f::eye(4, 4));
+
     // Main Loop
     while (key != 'q') {
 
         // 画像取得
         if (not loader.load(cur_left_image, cur_right_image)) {
-            std::cout << "loop" << std::endl;
+            // reset
+            std::cout << "reset" << std::endl;
             loader.reset();
             viewer.reset();
             initialize_done = false;
             pre_left_image.release();
             pre_right_image.release();
+            Tcw = cv::Mat1f::eye(4, 4);
             continue;
         }
 
@@ -88,17 +89,21 @@ int main()
         }
 
         // Epipolar Equation
-        cv::Mat Tcw = calcPose(mappoints);
+        cv::Mat1f Tr = calcPose(mappoints);
 
         // 三角測量
         triangulate(mappoints);
 
-        // スケールの計算
-        float scale = calcScale(mappoints, Tcw.colRange(0, 3).rowRange(0, 3));
+        // Scaling
+        float scale = calcScale(mappoints, Tr.colRange(0, 3).rowRange(0, 3));
+        scaleTranslation(Tr, scale);
+
+        // Integrate
+        Tcw *= Tr;
 
         // 描画
-        viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, mappoints);
-        std::cout << "\nPose" << scale << "\n"
+        viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, Tcw, mappoints);
+        std::cout << "\nPose\n"
                   << Tcw << "\n"
                   << std::endl;
 
@@ -112,7 +117,5 @@ int main()
         // wait
         key = viewer.waitKeyEver();
     }
-
-    viewer.stop();
     std::cout << "shut down" << std::endl;
 }

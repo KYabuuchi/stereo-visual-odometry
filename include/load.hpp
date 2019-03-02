@@ -32,7 +32,7 @@ public:
 
     bool peek(cv::Mat& src1, cv::Mat& src2)
     {
-        if (m_file_num >= file_names.size())
+        if (m_file_num >= static_cast<int>(file_names.size()))
             return false;
 
         cv::Mat src = cv::imread(m_path + "/" + file_names.at(m_file_num));

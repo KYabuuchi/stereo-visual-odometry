@@ -1,6 +1,7 @@
 #include "viewer.hpp"
 #include "params.hpp"
 #include <chrono>
+#include <opencv2/viz.hpp>
 
 Viewer::Viewer()
     : m_window_name("VIEW"),
@@ -8,15 +9,21 @@ Viewer::Viewer()
       m_reset_requested(false),
       m_stop_requested(false),
       m_update_called(false),
-      m_last_key(-1) {}
+      m_last_key(-1),
+      m_Tcw(cv::Mat1f::eye(4, 4)) {}
 
-Viewer::~Viewer() { stop(); }
+Viewer::~Viewer()
+{
+    stop();
+    m_thread->join();
+}
 
 void Viewer::reset() { m_reset_requested = true; }
 void Viewer::stop() { m_stop_requested = true; }
 
 void Viewer::update(
     const std::array<cv::Mat, 4>& images,
+    const cv::Mat Tcw,
     const std::vector<MapPointPtr>& mappoints)
 {
     {
@@ -25,7 +32,9 @@ void Viewer::update(
         for (const MapPointPtr point : mappoints) {
             m_mappoints.push_back(std::make_shared<MapPoint>(*point));
         }
+        std::cout << "debug " << mappoints.size() << std::endl;
         m_images = images;
+        m_Tcw = Tcw;
         m_update_called = true;
     }
     for (cv::Mat& image : m_images) {
@@ -43,9 +52,13 @@ int Viewer::waitKeyEver()
 }
 void Viewer::drawLoop()
 {
+    cv::viz::Viz3d viz_window("3D-VIEW");
+    cv::viz::WCoordinateSystem coordinate(0.1);
+    viz_window.showWidget("coordinate", coordinate);
+
     cv::namedWindow(m_window_name, cv::WINDOW_NORMAL);
     cv::resizeWindow(m_window_name, 640 * 2, 480 * 2);
-
+    int num = 0;
     while (1) {
         bool update = false;
         {
@@ -55,6 +68,7 @@ void Viewer::drawLoop()
         }
 
         if (update) {
+            // src images
             cv::Mat show, merge1, merge2;
             cv::hconcat(m_images.at(PL), m_images.at(PR), merge1);
             cv::hconcat(m_images.at(CL), m_images.at(CR), merge2);
@@ -82,16 +96,40 @@ void Viewer::drawLoop()
                     cv::line(show, p->preLeft() + OFFSET_CL, p->curLeft() + OFFSET_CL, CV_RGB(0, 255, 255), 1, cv::LineTypes::LINE_AA);
             }
             cv::imshow(m_window_name, show);
+
+            // 3D pointcloud
+            cv::Mat cloud_mat(3, 0, CV_32FC1);
+            for (const MapPointPtr& point : m_mappoints) {
+                if (not point->enable(C3))
+                    continue;
+                cv::Mat1f point_mat = cv::Mat1f(point->curStruct());
+                cv::hconcat(cloud_mat, point_mat, cloud_mat);
+            }
+            // 剛体変換
+            cv::Affine3f affine(m_Tcw);
+            cloud_mat = cloud_mat.t();
+            cloud_mat = cloud_mat.reshape(3);
+            cv::viz::WCloudCollection cloud;
+            cloud.addCloud(cloud_mat, cv::viz::Color::white(), affine);
+            viz_window.showWidget("cloud" + std::to_string(num++), cloud);
+
+            // 自己位置
+            cv::Point3f trans(m_Tcw.rowRange(0, 3).col(3));
+            cv::viz::WArrow arrow(trans, trans + cv::Point3f(0, 0, 0.1f), 0.05, cv::viz::Color::red());
+            viz_window.showWidget("arrow" + std::to_string(num++), arrow);
         }
 
         if (m_reset_requested) {
-            // TODO:
+            viz_window.removeAllWidgets();
+            viz_window.showWidget("coordinate", coordinate);
             m_reset_requested = false;
         }
 
         if (m_stop_requested) {
             break;
         }
+
+        viz_window.spinOnce(1, true);
 
         // key event
         {

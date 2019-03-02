@@ -44,9 +44,9 @@ public:
     bool enable(int id) const
     {
         if (id == P3)
-            return m_pre_struct.x >= 0;
+            return m_pre_struct.z >= 0;
         if (id == C3)
-            return m_cur_struct.x >= 0;
+            return m_cur_struct.z >= 0;
         return m_feature.at(id).x >= 0;
     }
 

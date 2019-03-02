@@ -16,6 +16,7 @@ public:
 
     void update(
         const std::array<cv::Mat, 4>& images,
+        const cv::Mat Tcw,
         const std::vector<MapPointPtr>& mappoints);
 
     void reset();
@@ -39,4 +40,5 @@ private:
     bool m_update_called;
 
     int m_last_key;
+    cv::Mat1f m_Tcw;
 };

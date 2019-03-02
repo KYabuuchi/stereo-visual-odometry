@@ -7,7 +7,7 @@ if(NOT DEFINED CMAKE_BUILD_TYPE)
 endif()
 
 # OpenCV
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 3 REQUIRED)
 
 # コンパイラーがC++17に対応しているかチェック
 include(CheckCXXCompilerFlag)
