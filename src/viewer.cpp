@@ -32,7 +32,6 @@ void Viewer::update(
         for (const MapPointPtr point : mappoints) {
             m_mappoints.push_back(std::make_shared<MapPoint>(*point));
         }
-        std::cout << "debug " << mappoints.size() << std::endl;
         m_images = images;
         m_Tcw = Tcw;
         m_update_called = true;
@@ -50,6 +49,15 @@ int Viewer::waitKeyEver()
     m_cv.wait(lock, [this] { return (m_last_key != -1); });
     return m_last_key;
 }
+
+int Viewer::waitKeyOnce()
+{
+    std::unique_lock lock(m_mutex);
+    m_cv.wait(lock, [this] { return m_last_key; });
+    return m_last_key;
+}
+
+
 void Viewer::drawLoop()
 {
     cv::viz::Viz3d viz_window("3D-VIEW");
@@ -70,9 +78,13 @@ void Viewer::drawLoop()
         if (update) {
             // src images
             cv::Mat show, merge1, merge2;
-            cv::hconcat(m_images.at(PL), m_images.at(PR), merge1);
-            cv::hconcat(m_images.at(CL), m_images.at(CR), merge2);
-            cv::vconcat(merge1, merge2, show);
+            try {
+                cv::hconcat(m_images.at(PL), m_images.at(PR), merge1);
+                cv::hconcat(m_images.at(CL), m_images.at(CR), merge2);
+                cv::vconcat(merge1, merge2, show);
+            } catch (...) {
+                continue;
+            }
 
             const cv::Size2f size = m_images.at(CL).size();
             const cv::Point2f OFFSET_PL(0, 0);
@@ -102,8 +114,7 @@ void Viewer::drawLoop()
             for (const MapPointPtr& point : m_mappoints) {
                 if (not point->enable(C3))
                     continue;
-                cv::Mat1f point_mat = cv::Mat1f(point->curStruct());
-                cv::hconcat(cloud_mat, point_mat, cloud_mat);
+                cv::hconcat(cloud_mat, point->curStruct(), cloud_mat);
             }
             // 剛体変換
             cv::Affine3f affine(m_Tcw);
@@ -114,8 +125,9 @@ void Viewer::drawLoop()
             viz_window.showWidget("cloud" + std::to_string(num++), cloud);
 
             // 自己位置
-            cv::Point3f trans(m_Tcw.rowRange(0, 3).col(3));
-            cv::viz::WArrow arrow(trans, trans + cv::Point3f(0, 0, 0.1f), 0.05, cv::viz::Color::red());
+            cv::Point3f body(m_Tcw.rowRange(0, 3).col(3));
+            cv::Point3f head(cv::Mat1f(m_Tcw.rowRange(0, 3).colRange(0, 3) * (cv::Mat1f(3, 1) << 0, 0, 0.1f)));
+            cv::viz::WArrow arrow(body, body + head, 0.05, cv::viz::Color::red());
             viz_window.showWidget("arrow" + std::to_string(num++), arrow);
         }
 

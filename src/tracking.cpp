@@ -30,21 +30,21 @@ cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints)
 
 float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
 {
-    cv::Point3f pre(0, 0, 0);
-    cv::Point3f cur(0, 0, 0);
-    int num = 0;
+    cv::Mat1f pre = cv::Mat1f(cv::Mat1f::zeros(3, 0));
+    cv::Mat1f cur = cv::Mat1f(cv::Mat1f::zeros(3, 0));
     for (const MapPointPtr mp : mappoints) {
         if (not mp->scaleEstimatable())
             continue;
-        cur += mp->curStruct();
-        pre += mp->preStruct();
-        num++;
+        cv::hconcat(cur, mp->curStruct(), cur);
+        cv::hconcat(pre, mp->preStruct(), pre);
     }
 
-    if (num > 0) {
-        cv::Mat pre_point(pre / num);
-        cv::Mat cur_point(cur / num);
-        return static_cast<float>(cv::norm(pre_point - R * cur_point));
+    if (cur.cols > 0) {
+        cv::Mat1f diff = pre - R * cur;
+        diff = diff.t();
+        cv::Mat3f tmp = diff.reshape(3);
+        cv::Scalar scalar = cv::mean(tmp);
+        return static_cast<float>(cv::norm(scalar));
     }
     return 0.0f;
 }
@@ -73,7 +73,7 @@ size_t triangulate(std::vector<MapPointPtr>& mappoints)
         cv::Point3f p = cv::Point3f(tmp.col(i));
         if (p.z < 0) {
             std::cerr << "negative depth" << std::endl;
-            p = -p;
+            continue;
         }
         triangulatable_points.at(i)->setCurStruct(p);
     }

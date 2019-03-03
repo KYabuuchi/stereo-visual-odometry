@@ -1,3 +1,7 @@
+.vscode*
 build*/
-data/VGA10CM/
-
+data/VGA_100MM_FRONT
+data/VGA_100MM_ROTATE
+data/VGA_CALIBRATION
+data/VGA_DESK
+data/VGA_POSTER

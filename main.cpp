@@ -8,11 +8,15 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-int main()
+int main(int argc, char* argv[])
 {
+    std::string file_path = "../data/VGA_100MM_FRONT";
+    if (argc == 2)
+        file_path = argv[1];
+
     Feature feature;
     Viewer viewer;
-    Loader loader("../data/VGA10CM");
+    Loader loader(file_path);
 
     std::vector<std::shared_ptr<MapPoint>> mappoints;
     cv::Mat cur_left_image, cur_right_image;
@@ -97,13 +101,18 @@ int main()
         // Scaling
         float scale = calcScale(mappoints, Tr.colRange(0, 3).rowRange(0, 3));
         scaleTranslation(Tr, scale);
+        if (scale > 0.2f) {
+            std::cout << "BBBBBBBBBBBBBBBBBBBBB\n"
+                      << std::endl;
+        }
+        std::cout << scale << std::endl;
 
         // Integrate
         Tcw *= Tr;
 
         // 描画
         viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, Tcw, mappoints);
-        std::cout << "\nPose\n"
+        std::cout << "\n"
                   << Tcw << "\n"
                   << std::endl;
 
@@ -116,6 +125,8 @@ int main()
 
         // wait
         key = viewer.waitKeyEver();
+        // key = viewer.waitKeyOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
     std::cout << "shut down" << std::endl;
 }

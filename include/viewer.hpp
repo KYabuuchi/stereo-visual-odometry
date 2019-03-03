@@ -22,6 +22,7 @@ public:
     void reset();
     void stop();
     int waitKeyEver();
+    int waitKeyOnce();
 
 private:
     void drawLoop();
