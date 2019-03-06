@@ -44,3 +44,6 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
 file(GLOB SOURCES src/*.cpp)
 add_executable(main main.cpp ${SOURCES})
 target_link_libraries(main ${OpenCV_LIBS} pthread)
+
+add_executable(robust test/robust.cpp)
+target_link_libraries(robust ${OpenCV_LIBS})

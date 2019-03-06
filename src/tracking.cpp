@@ -1,5 +1,7 @@
 #include "tracking.hpp"
 #include "params.hpp"
+#include "util.hpp"
+#include <fstream>
 
 cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints)
 {
@@ -40,11 +42,9 @@ float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
     }
 
     if (cur.cols > 0) {
-        cv::Mat1f diff = pre - R * cur;
-        diff = diff.t();
-        cv::Mat3f tmp = diff.reshape(3);
-        cv::Scalar scalar = cv::mean(tmp);
-        return static_cast<float>(cv::norm(scalar));
+        cv::Mat1f diff = cv::Mat1f(pre - R * cur);
+        cv::Scalar mean = robustMean(diff);
+        return static_cast<float>(cv::norm(mean));
     }
     return 0.0f;
 }
