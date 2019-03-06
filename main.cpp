@@ -102,17 +102,16 @@ int main(int argc, char* argv[])
         float scale = calcScale(mappoints, Tr.colRange(0, 3).rowRange(0, 3));
         scaleTranslation(Tr, scale);
         if (scale > 0.2f) {
-            std::cout << "BBBBBBBBBBBBBBBBBBBBB\n"
-                      << std::endl;
+            std::cout << "(WARNING: too much movement) ";
         }
-        std::cout << scale << std::endl;
+        std::cout << "(scale) " << scale << std::endl;
 
         // Integrate
         Tcw *= Tr;
 
         // 描画
         viewer.update({pre_left_image, pre_right_image, cur_left_image, cur_right_image}, Tcw, mappoints);
-        std::cout << "\n"
+        std::cout << "(Tcw)\n"
                   << Tcw << "\n"
                   << std::endl;
 

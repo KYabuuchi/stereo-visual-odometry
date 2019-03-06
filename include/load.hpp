@@ -37,9 +37,10 @@ public:
 
         cv::Mat src = cv::imread(m_path + "/" + file_names.at(m_file_num));
         if (src.empty()) {
-            std::cout << "can not open " << file_names.at(m_file_num);
+            std::cout << "can not open " << file_names.at(m_file_num) << std::endl;
             return false;
         }
+        std::cout << "open " << file_names.at(m_file_num) << std::endl;
 
         src1 = src.colRange(0, src.cols / 2);
         src2 = src.colRange(src.cols / 2, src.cols);

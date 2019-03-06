@@ -24,6 +24,16 @@ cv::Mat calcPose(const std::vector<MapPointPtr>& mappoints)
     cv::Mat t, R, E, mask;
     E = cv::findEssentialMat(cur_left, pre_left, Params::ZED_INTRINSIC, cv::RANSAC, 0.999, 1.0, mask);
     cv::recoverPose(E, cur_left, pre_left, Params::ZED_INTRINSIC, R, t, mask);
+    R.convertTo(R, CV_32FC1);
+    t.convertTo(t, CV_32FC1);
+
+    if (R.at<float>(0, 0) < 0) {
+        cv::Mat1f reviser = (cv::Mat1f(3, 3) << -1, 0, 0,
+            0, -1, 0,
+            0, 0, 1);
+        R = reviser * R;
+        std::cout << "(WARNING: something happen)" << std::endl;
+    }
     R.copyTo(T.colRange(0, 3).rowRange(0, 3));
     t.copyTo(T.rowRange(0, 3).col(3));
 
@@ -43,7 +53,8 @@ float calcScale(const std::vector<MapPointPtr>& mappoints, const cv::Mat1f& R)
 
     if (cur.cols > 0) {
         cv::Mat1f diff = cv::Mat1f(pre - R * cur);
-        cv::Scalar mean = robustMean(diff);
+        cv::Scalar mean = robustMean(diff, true);
+        std::cout << mean << std::endl;
         return static_cast<float>(cv::norm(mean));
     }
     return 0.0f;
